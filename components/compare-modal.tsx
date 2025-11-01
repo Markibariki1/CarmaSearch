@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -35,7 +35,17 @@ export function CompareModal({ isOpen, onClose }: CompareModalProps) {
   const [searchResults, setSearchResults] = useState<{ vehicle: Vehicle; comparables: Vehicle[] } | null>(null)
   const [error, setError] = useState<string>("")
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
+  const activeRequest = useRef<AbortController | null>(null)
   const { toast } = useToast()
+
+  useEffect(() => {
+    return () => {
+      if (activeRequest.current) {
+        activeRequest.current.abort()
+        activeRequest.current = null
+      }
+    }
+  }, [])
 
   const exteriorColors = ["Beige", "Blue", "Brown", "Bronze", "Yellow", "Gray", "Green", "Red", "Black", "Silver", "Purple", "White", "Orange", "Gold"]
   const interiorColors = ["Beige", "Black", "Gray", "Brown", "Other", "Blue", "Red", "Green", "Yellow", "Orange", "White"]
@@ -98,12 +108,23 @@ export function CompareModal({ isOpen, onClose }: CompareModalProps) {
       return
     }
 
+    if (activeRequest.current) {
+      activeRequest.current.abort()
+      activeRequest.current = null
+    }
+
     setIsSearching(true)
     setError("")
-    setSearchResults(null)
+
+    const controller = new AbortController()
+    activeRequest.current = controller
 
     try {
-      const results = await compareVehicle(vehicleUrl.trim())
+      const results = await compareVehicle(vehicleUrl.trim(), {
+        top: 12,
+        signal: controller.signal
+      })
+
       setSearchResults(results)
       
       toast({
@@ -111,6 +132,9 @@ export function CompareModal({ isOpen, onClose }: CompareModalProps) {
         description: `Found ${results.comparables.length} similar vehicles using CARMA's AI matching.`,
       })
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return
+      }
       const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred"
       setError(errorMessage)
       
@@ -120,6 +144,9 @@ export function CompareModal({ isOpen, onClose }: CompareModalProps) {
         variant: "destructive",
       })
     } finally {
+      if (activeRequest.current === controller) {
+        activeRequest.current = null
+      }
       setIsSearching(false)
     }
   }
@@ -128,8 +155,62 @@ export function CompareModal({ isOpen, onClose }: CompareModalProps) {
     handleCompare()
   }
 
+  const handleDialogChange = (open: boolean) => {
+    if (!open) {
+      if (activeRequest.current) {
+        activeRequest.current.abort()
+        activeRequest.current = null
+      }
+      setIsSearching(false)
+      setError("")
+      onClose()
+    }
+  }
+
+  const filteredComparables = useMemo(() => {
+    if (!searchResults) {
+      return []
+    }
+
+    return searchResults.comparables.filter((vehicle) => {
+      if (selectedExteriorColors.length > 0 && !selectedExteriorColors.includes(vehicle.exterior_color || "Other")) {
+        return false
+      }
+      if (selectedInteriorColors.length > 0 && !selectedInteriorColors.includes(vehicle.interior_color || "Other")) {
+        return false
+      }
+      if (selectedInteriorMaterials.length > 0 && !selectedInteriorMaterials.includes(vehicle.upholstery_color || "Other")) {
+        return false
+      }
+      if (registrationFrom && vehicle.year < parseInt(registrationFrom)) {
+        return false
+      }
+      if (registrationUntil && vehicle.year > parseInt(registrationUntil)) {
+        return false
+      }
+      if (mileageFrom && vehicle.mileage_km < parseInt(mileageFrom)) {
+        return false
+      }
+      if (mileageUntil && vehicle.mileage_km > parseInt(mileageUntil)) {
+        return false
+      }
+      return true
+    })
+  }, [
+    searchResults,
+    selectedExteriorColors,
+    selectedInteriorColors,
+    selectedInteriorMaterials,
+    registrationFrom,
+    registrationUntil,
+    mileageFrom,
+    mileageUntil
+  ])
+
+  const comparablesToDisplay = useMemo(() => filteredComparables.slice(0, 12), [filteredComparables])
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleDialogChange}>
       <DialogContent className="sm:max-w-6xl max-h-[95vh] overflow-y-auto bg-black/90 backdrop-blur-xl border border-white/10">
         <DialogHeader className="border-b border-white/10 pb-6">
           <DialogTitle className="text-2xl font-bold text-white flex items-center gap-3">
@@ -537,67 +618,38 @@ export function CompareModal({ isOpen, onClose }: CompareModalProps) {
                     Similar Vehicles Found
                   </h3>
                   <Badge variant="secondary" className="bg-white/10 text-white border-white/20">
-                    {searchResults.comparables.filter((vehicle) => {
-                      // Apply filtering logic
-                      if (selectedExteriorColors.length > 0 && !selectedExteriorColors.includes(vehicle.exterior_color || 'Other')) {
-                        return false
-                      }
-                      if (selectedInteriorColors.length > 0 && !selectedInteriorColors.includes(vehicle.interior_color || 'Other')) {
-                        return false
-                      }
-                      if (selectedInteriorMaterials.length > 0 && !selectedInteriorMaterials.includes(vehicle.upholstery_color || 'Other')) {
-                        return false
-                      }
-                      if (registrationFrom && vehicle.year < parseInt(registrationFrom)) {
-                        return false
-                      }
-                      if (registrationUntil && vehicle.year > parseInt(registrationUntil)) {
-                        return false
-                      }
-                      if (mileageFrom && vehicle.mileage_km < parseInt(mileageFrom)) {
-                        return false
-                      }
-                      if (mileageUntil && vehicle.mileage_km > parseInt(mileageUntil)) {
-                        return false
-                      }
-                      return true
-                    }).length} results
+                    {filteredComparables.length} results
                   </Badge>
                 </div>
 
                 <div className="space-y-4">
-                  {searchResults.comparables
-                    .filter((vehicle) => {
-                      // Filter by exterior color
-                      if (selectedExteriorColors.length > 0 && !selectedExteriorColors.includes(vehicle.exterior_color || 'Other')) {
-                        return false
-                      }
-                      // Filter by interior color
-                      if (selectedInteriorColors.length > 0 && !selectedInteriorColors.includes(vehicle.interior_color || 'Other')) {
-                        return false
-                      }
-                      // Filter by interior material
-                      if (selectedInteriorMaterials.length > 0 && !selectedInteriorMaterials.includes(vehicle.upholstery_color || 'Other')) {
-                        return false
-                      }
-                      // Filter by registration year range
-                      if (registrationFrom && vehicle.year < parseInt(registrationFrom)) {
-                        return false
-                      }
-                      if (registrationUntil && vehicle.year > parseInt(registrationUntil)) {
-                        return false
-                      }
-                      // Filter by mileage range
-                      if (mileageFrom && vehicle.mileage_km < parseInt(mileageFrom)) {
-                        return false
-                      }
-                      if (mileageUntil && vehicle.mileage_km > parseInt(mileageUntil)) {
-                        return false
-                      }
-                      return true
-                    })
-                    .map((vehicle, index) => {
+                  {comparablesToDisplay.map((vehicle, index) => {
                     const dealScore = formatDealScore(vehicle.deal_score)
+                    const similarityScore = typeof vehicle.similarity_score === 'number'
+                      ? vehicle.similarity_score
+                      : typeof vehicle.score === 'number'
+                        ? vehicle.score
+                        : undefined
+                    const finalScore = typeof vehicle.final_score === 'number'
+                      ? vehicle.final_score
+                      : similarityScore
+                    const preferenceScore = typeof vehicle.preference_score === 'number'
+                      ? vehicle.preference_score
+                      : undefined
+                    const matchPercentage = finalScore !== undefined ? (finalScore * 100).toFixed(1) : null
+                    const similarityPercentage = similarityScore !== undefined ? Math.round(similarityScore * 100) : null
+                    const preferencePercentage = preferenceScore !== undefined ? Math.round(preferenceScore * 100) : null
+                    let dealPercent: number | null = null
+                    if (typeof vehicle.deal_score === 'number') {
+                      let normalized = vehicle.deal_score
+                      if (normalized >= 0 && normalized <= 1) {
+                        normalized = (normalized - 0.5) * 100
+                      } else {
+                        normalized = normalized * 100
+                      }
+                      dealPercent = Math.round(normalized)
+                    }
+                    const filterLevel = vehicle.ranking_details?.filter_level
                     return (
                       <Card key={vehicle.id} className="p-4 hover:shadow-lg transition-all duration-300 bg-black/40 backdrop-blur-sm border border-white/10 hover:border-white/20">
                         <div className="flex gap-4">
@@ -607,6 +659,7 @@ export function CompareModal({ isOpen, onClose }: CompareModalProps) {
                                 src={vehicle.images[0]} 
                                 alt={`${vehicle.make} ${vehicle.model}`}
                                 className="w-28 h-20 object-cover rounded-lg"
+                                loading="lazy"
                                 onError={(e) => {
                                   e.currentTarget.style.display = 'none';
                                   e.currentTarget.nextElementSibling.style.display = 'flex';
@@ -641,14 +694,19 @@ export function CompareModal({ isOpen, onClose }: CompareModalProps) {
                               </div>
 
                               <div className="text-right ml-4">
-                                <div className="flex items-center gap-2 mb-2">
+                              <div className="flex items-center gap-2 mb-2">
                                   <Badge variant={index === 0 ? "default" : "secondary"} className={index === 0 ? "bg-primary/20 text-primary border-primary/30" : "bg-white/10 text-white border-white/20"}>
                                     #{index + 1}
                                   </Badge>
+                                  {filterLevel ? (
+                                    <Badge variant="outline" className="border-white/10 bg-transparent text-white/70">
+                                      L{filterLevel}
+                                    </Badge>
+                                  ) : null}
                                   <div className="flex items-center gap-1">
                                     <Star className="h-3 w-3 text-primary" />
                                     <span className="text-xs text-white/60">
-                                      {vehicle.score ? (vehicle.score * 100).toFixed(1) : 'N/A'}% match
+                                      {matchPercentage ?? 'N/A'}% match
                                     </span>
                                   </div>
                                 </div>
@@ -663,6 +721,22 @@ export function CompareModal({ isOpen, onClose }: CompareModalProps) {
                                   <div className={`text-xs font-medium ${dealScore.class}`}>
                                     {dealScore.text}
                                   </div>
+                                  <div className="text-xs text-white/50 space-x-2">
+                                    {similarityPercentage !== null && (
+                                      <span>Sim {similarityPercentage}%</span>
+                                    )}
+                                    {dealPercent !== null && (
+                                      <span>Deal {dealPercent > 0 ? '+' : ''}{dealPercent}%</span>
+                                    )}
+                                    {preferencePercentage !== null && preferencePercentage > 0 && (
+                                      <span>Pref {preferencePercentage}%</span>
+                                    )}
+                                  </div>
+                                  {typeof vehicle.savings === 'number' && vehicle.savings > 0 && (
+                                    <div className="text-xs text-emerald-400">
+                                      Saves {formatPrice(vehicle.savings)}
+                                    </div>
+                                  )}
                                 </div>
 
                                 <div>

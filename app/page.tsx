@@ -12,28 +12,33 @@ import { LogoScrollWheel } from "@/components/logo-scroll-wheel"
 import { useAuth } from "@/hooks/use-auth"
 import { useToast } from "@/hooks/use-toast"
 
-// Animated counter component
+// Animated counter component - Optimized
 function AnimatedCounter({ target }: { target: number }) {
   const [count, setCount] = useState(0)
+  const [isComplete, setIsComplete] = useState(false)
 
   useEffect(() => {
+    if (isComplete) return
+
     const duration = 2000 // 2 seconds
-    const steps = 60
+    const steps = 50 // Reduced for better performance
     const increment = target / steps
     const stepDuration = duration / steps
 
+    let currentStep = 0
     const timer = setInterval(() => {
-      setCount((prev) => {
-        const next = Math.floor(prev + increment)
-        if (next >= target) {
-          return target
-        }
-        return next
-      })
+      currentStep++
+      if (currentStep >= steps) {
+        setCount(target)
+        setIsComplete(true)
+        clearInterval(timer)
+      } else {
+        setCount(Math.floor(increment * currentStep))
+      }
     }, stepDuration)
 
     return () => clearInterval(timer)
-  }, [target])
+  }, [target, isComplete])
 
   return <>{count.toLocaleString()}k+</>
 }
@@ -47,23 +52,37 @@ export default function HomePage() {
   const { user, isAuthenticated } = useAuth()
   const { toast } = useToast()
 
-  // Fetch vehicle count from API
+  // Fetch vehicle count from API - Only once
   useEffect(() => {
+    let isMounted = true
     const fetchVehicleCount = async () => {
       try {
         const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://carma-ml-api.greenwater-7817a41f.northeurope.azurecontainerapps.io'
-        const response = await fetch(`${API_BASE}/stats`)
-        if (response.ok) {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000) // 5s timeout
+        
+        const response = await fetch(`${API_BASE}/stats`, {
+          signal: controller.signal
+        })
+        clearTimeout(timeoutId)
+        
+        if (response.ok && isMounted) {
           const data = await response.json()
-          // Convert to thousands (254,857 -> 254)
+          // Convert to thousands (263,594 -> 263)
           const count = Math.floor(data.total_vehicles / 1000)
           setVehicleCount(count)
         }
       } catch (error) {
-        console.error('Failed to fetch vehicle count:', error)
+        if (error.name !== 'AbortError') {
+          console.error('Failed to fetch vehicle count:', error)
+        }
       }
     }
     fetchVehicleCount()
+    
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   const handleCompareClick = () => {
