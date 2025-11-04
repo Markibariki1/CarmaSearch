@@ -16,9 +16,7 @@ COPY requirements_flask.txt .
 RUN pip install --no-cache-dir -r requirements_flask.txt
 
 # Copy application code
-COPY src/app_flask.py ./app.py
-COPY src/similarity_engine.py ./similarity_engine.py
-COPY src/ranking_pipeline.py ./ranking_pipeline.py
+COPY src/api.py ./app.py
 COPY src/__init__.py ./__init__.py
 
 # Create non-root user
