@@ -1,4 +1,5 @@
 "use client"
+/* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -9,9 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Link, ChevronDown, Star, TrendingUp, TrendingDown, ExternalLink, Loader2, Car, Calendar, Gauge, Euro, Palette, Target, ChevronRight, ChevronUp } from "lucide-react"
+import { Link as LinkIcon, ChevronDown, Star, TrendingUp, TrendingDown, ExternalLink, Loader2, Car, Calendar, Gauge, Euro, Palette, Target, ChevronRight, ChevronUp } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { compareVehicle, formatDealScore, formatPrice, formatMileage, Vehicle } from "@/lib/api"
+import { compareVehicle, formatDealScore, formatPrice, formatMileage, Vehicle, ComparablesResponse } from "@/lib/api"
 
 interface CompareModalProps {
   isOpen: boolean
@@ -32,7 +33,7 @@ export function CompareModal({ isOpen, onClose }: CompareModalProps) {
   const [showInteriorColors, setShowInteriorColors] = useState(false)
   const [showInteriorMaterials, setShowInteriorMaterials] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
-  const [searchResults, setSearchResults] = useState<{ vehicle: Vehicle; comparables: Vehicle[] } | null>(null)
+  const [searchResults, setSearchResults] = useState<ComparablesResponse | null>(null)
   const [error, setError] = useState<string>("")
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
   const activeRequest = useRef<AbortController | null>(null)
@@ -155,14 +156,33 @@ export function CompareModal({ isOpen, onClose }: CompareModalProps) {
     handleCompare()
   }
 
-  const handleDialogChange = (open: boolean) => {
-    if (!open) {
+  useEffect(() => {
+    if (!isOpen) {
+      setVehicleUrl("")
+      setShowAdvanced(false)
+      setSelectedExteriorColors([])
+      setSelectedInteriorColors([])
+      setSelectedInteriorMaterials([])
+      setRegistrationFrom("")
+      setRegistrationUntil("")
+      setMileageFrom("")
+      setMileageUntil("")
+      setShowExteriorColors(false)
+      setShowInteriorColors(false)
+      setShowInteriorMaterials(false)
+      setIsSearching(false)
+      setError("")
+      setIsDescriptionExpanded(false)
+      setSearchResults(null)
       if (activeRequest.current) {
         activeRequest.current.abort()
         activeRequest.current = null
       }
-      setIsSearching(false)
-      setError("")
+    }
+  }, [isOpen])
+
+  const handleDialogChange = (open: boolean) => {
+    if (!open) {
       onClose()
     }
   }
@@ -207,7 +227,14 @@ export function CompareModal({ isOpen, onClose }: CompareModalProps) {
     mileageUntil
   ])
 
-  const comparablesToDisplay = useMemo(() => filteredComparables.slice(0, 12), [filteredComparables])
+  // Limit displayed comparables to prevent memory issues
+  const comparablesToDisplay = useMemo(() => {
+    const maxDisplay = 12
+    return filteredComparables.slice(0, maxDisplay).map((vehicle, index) => ({
+      ...vehicle,
+      displayIndex: index
+    }))
+  }, [filteredComparables])
 
   return (
     <Dialog open={isOpen} onOpenChange={handleDialogChange}>
@@ -224,7 +251,7 @@ export function CompareModal({ isOpen, onClose }: CompareModalProps) {
           <div className="space-y-4">
             <Label htmlFor="vehicle-url" className="text-white/90 text-sm font-medium">Vehicle Listing URL</Label>
             <div className="relative">
-              <Link className="absolute left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 text-white/40" />
+              <LinkIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 text-white/40" />
               <Input
                 id="vehicle-url"
                 type="url"
@@ -496,6 +523,8 @@ export function CompareModal({ isOpen, onClose }: CompareModalProps) {
                           src={searchResults.vehicle.images[0]} 
                           alt={`${searchResults.vehicle.make} ${searchResults.vehicle.model}`}
                           className="w-80 h-48 object-cover rounded-xl shadow-lg"
+                          loading="lazy"
+                          decoding="async"
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
                           }}
@@ -612,14 +641,21 @@ export function CompareModal({ isOpen, onClose }: CompareModalProps) {
 
               {/* Comparable Vehicles */}
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                   <h3 className="text-xl font-semibold text-white flex items-center gap-2">
                     <Star className="h-5 w-5 text-primary" />
                     Similar Vehicles Found
                   </h3>
-                  <Badge variant="secondary" className="bg-white/10 text-white border-white/20">
-                    {filteredComparables.length} results
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="bg-white/10 text-white border-white/20">
+                      {filteredComparables.length} results
+                    </Badge>
+                    {searchResults.metadata && (
+                      <span className="text-xs text-white/50">
+                        Requested top {searchResults.metadata.requested_top}, ranked {searchResults.metadata.returned} of {searchResults.metadata.total_candidates} candidates
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-4">

@@ -4,7 +4,6 @@ import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Home, Search, TrendingUp, Bell, Settings, HelpCircle } from "lucide-react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 
 interface MobileMenuProps {
@@ -14,20 +13,15 @@ interface MobileMenuProps {
 
 export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
   const router = useRouter()
-  
-  const menuItems = [
-    { icon: Home, label: "Home", href: "/" },
-    { icon: Search, label: "Compare", href: "/compare" },
-    { icon: TrendingUp, label: "Portfolio", href: "/portfolio" },
-    { icon: Bell, label: "Price Alerts", href: "/alerts" },
-    { icon: Settings, label: "Settings", href: "/settings" },
-    { icon: HelpCircle, label: "Help & Support", href: "/help" },
-  ]
 
-  const handleNavigation = (href: string) => {
-    router.push(href)
-    onClose()
-  }
+  const menuItems = [
+    { icon: Home, label: "Home", action: () => router.push("/") },
+    { icon: Search, label: "Compare Vehicles", action: () => router.push("/#compare-section") },
+    { icon: TrendingUp, label: "Portfolio", action: () => router.push("/portfolio") },
+    { icon: Bell, label: "Price Alerts", action: () => router.push("/#price-alerts") },
+    { icon: Settings, label: "Account Settings", action: () => router.push("/account") },
+    { icon: HelpCircle, label: "Help & Support", action: () => router.push("/help") },
+  ]
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -47,7 +41,10 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
               key={item.label} 
               variant="ghost" 
               className="w-full justify-start gap-4 h-14 text-white/80 hover:text-white hover:bg-white/10 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] hover:shadow-lg active:scale-[0.98]" 
-              onClick={() => handleNavigation(item.href)}
+              onClick={() => {
+                item.action()
+                onClose()
+              }}
             >
               <item.icon className="h-5 w-5" />
               <span className="font-medium">{item.label}</span>

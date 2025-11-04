@@ -44,7 +44,7 @@ export default function HelpPage() {
                 Send us a message
               </CardTitle>
               <CardDescription>
-                We'll get back to you within 24 hours
+                We&apos;ll get back to you within 24 hours
               </CardDescription>
             </CardHeader>
             <CardContent>

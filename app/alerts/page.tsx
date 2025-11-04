@@ -307,7 +307,7 @@ export default function AlertsPage() {
                   <Bell className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
                   <CardTitle className="mb-2">No Notifications</CardTitle>
                   <CardDescription>
-                    You'll receive notifications here when your price alerts are triggered.
+                    You&apos;ll receive notifications here when your price alerts are triggered.
                   </CardDescription>
                 </CardContent>
               </Card>

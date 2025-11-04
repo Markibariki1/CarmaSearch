@@ -1,46 +1,31 @@
 "use client"
+/* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useRef } from 'react'
+import { useMemo } from 'react'
 
 interface LogoScrollWheelProps {
   logos: Array<{ src: string; alt: string; href?: string }>
 }
 
 export function LogoScrollWheel({ logos }: LogoScrollWheelProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    // Create duplicate logos for seamless loop
-    const content = container.innerHTML
-    container.innerHTML = content + content + content
-
-    // Reset animation if it gets stuck
-    const resetAnimation = () => {
-      if (container.scrollLeft >= container.scrollWidth / 3) {
-        container.scrollLeft = 0
-      }
-    }
-
-    const interval = setInterval(resetAnimation, 1000)
-
-    return () => clearInterval(interval)
+  const marqueeItems = useMemo(() => {
+    if (!logos || logos.length === 0) return []
+    // Duplicate array so the animation can loop seamlessly.
+    return [...logos, ...logos]
   }, [logos])
 
   return (
     <div className="overflow-hidden py-8">
       <div
-        ref={containerRef}
-        className="flex gap-8 animate-scroll"
+        className="flex gap-8"
         style={{
-          animation: 'scroll 30s linear infinite',
+          width: 'max-content',
+          animation: 'carma-marquee 25s linear infinite',
         }}
       >
-        {logos.map((logo, index) => (
+        {marqueeItems.map((logo, index) => (
           <div
-            key={index}
+            key={`${logo.src}-${index}`}
             className="flex-shrink-0 flex items-center justify-center h-10 opacity-60 hover:opacity-100 transition-opacity duration-300"
           >
             {logo.href ? (
@@ -61,14 +46,14 @@ export function LogoScrollWheel({ logos }: LogoScrollWheelProps) {
           </div>
         ))}
       </div>
-      
+
       <style jsx global>{`
-        @keyframes scroll {
+        @keyframes carma-marquee {
           0% {
             transform: translateX(0);
           }
           100% {
-            transform: translateX(-33.333%);
+            transform: translateX(-50%);
           }
         }
       `}</style>

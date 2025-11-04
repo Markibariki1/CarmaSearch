@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +25,24 @@ export function AuthModal({ isOpen, onClose, mode = "login" }: AuthModalProps) {
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
 
+  const resetForm = () => {
+    setEmail("")
+    setPassword("")
+    setShowPassword(false)
+    setIsLoading(false)
+  }
+
+  useEffect(() => {
+    setActiveTab(mode)
+  }, [mode])
+
+  useEffect(() => {
+    if (!isOpen) {
+      resetForm()
+      setActiveTab(mode)
+    }
+  }, [isOpen, mode])
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
@@ -46,10 +64,8 @@ export function AuthModal({ isOpen, onClose, mode = "login" }: AuthModalProps) {
           title: "Welcome back!",
           description: "You've been signed in successfully.",
         })
+        resetForm()
         onClose()
-        setTimeout(() => {
-          window.location.reload()
-        }, 1000)
       }
     } catch (error) {
       toast({
@@ -87,17 +103,14 @@ export function AuthModal({ isOpen, onClose, mode = "login" }: AuthModalProps) {
             title: "Account created!",
             description: "Welcome to CARMA! You're now signed in.",
           })
-          onClose()
-          setTimeout(() => {
-            window.location.reload()
-          }, 1000)
         } else {
           toast({
             title: "Account created!",
             description: "Please check your email to confirm your account.",
           })
-          onClose()
         }
+        resetForm()
+        onClose()
       }
     } catch (error) {
       toast({

@@ -32,8 +32,13 @@ async function retryApiCall<T>(
         throw error;
       }
 
-      // Don't retry on client errors (4xx)
+      // Don't retry on client errors (4xx) - these are user errors, not server errors
       if (error instanceof Error && error.message.includes('HTTP 4')) {
+        throw error;
+      }
+      
+      // Don't retry on "not found" or "Vehicle not found" errors
+      if (error instanceof Error && (error.message.includes('not found') || error.message.includes('Not found'))) {
         throw error;
       }
 
@@ -97,11 +102,11 @@ export interface ApiStats {
   total_vehicles: number;
   unique_makes: number;
   data_sources: number;
-  status: string;
+  status?: string;
 }
 
 export interface ApiHealth {
-  status: string;
+  status?: string;
   database_connected: boolean;
   timestamp: string;
 }
@@ -201,16 +206,25 @@ const normalizeVehicle = (raw: any): Vehicle => {
 export function extractVehicleId(input: string): string {
   if (input.includes('autoscout24.de')) {
     const parts = input.split('/');
-    const lastPart = parts[parts.length - 1];
+    const lastPart = parts[parts.length - 1].split('?')[0]; // Remove query params if present
     
     // Extract UUID from the last part of the URL
-    // AutoScout24 URLs have format: ...-uuid
-    const uuidMatch = lastPart.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/);
+    // AutoScout24 URLs have format: ...-uuid or ...-uuid?query=params
+    // Try to match UUID at the end of the string
+    const uuidPattern = /([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})(?:\?|$)/;
+    const uuidMatch = lastPart.match(uuidPattern);
     if (uuidMatch) {
       return uuidMatch[1];
     }
     
-    // Fallback: return the last part if no UUID pattern found
+    // Fallback: try to find UUID anywhere in the string (for robustness)
+    const uuidPatternAnywhere = /([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/;
+    const uuidMatchAnywhere = lastPart.match(uuidPatternAnywhere);
+    if (uuidMatchAnywhere) {
+      return uuidMatchAnywhere[1];
+    }
+    
+    // Last fallback: return the last part if no UUID pattern found
     return lastPart;
   }
   return input.trim();
@@ -236,7 +250,7 @@ export async function checkApiHealth(): Promise<ApiHealth> {
 // Get database statistics
 export async function getDatabaseStats(): Promise<ApiStats> {
   return retryApiCall(async () => {
-    const response = await fetch(`${API_BASE}/database/stats`);
+    const response = await fetch(`${API_BASE}/stats`);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
@@ -248,10 +262,23 @@ export async function getDatabaseStats(): Promise<ApiStats> {
 export async function getVehicleDetails(vehicleId: string, signal?: AbortSignal): Promise<Vehicle> {
   return retryApiCall(async () => {
     const response = await fetch(`${API_BASE}/listings/${vehicleId}`, { signal });
+    
+    // Don't retry on 404 - vehicle simply doesn't exist
+    if (response.status === 404) {
+      let errorMessage = 'Vehicle not found. Please check the URL and try again.';
+      try {
+        const errorData = await response.json();
+        if (errorData.error) {
+          errorMessage = errorData.error;
+        }
+      } catch {
+        // Ignore JSON parse errors, use default message
+      }
+      throw new Error(errorMessage);
+    }
+    
     if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error('Vehicle not found. Please check the URL and try again.');
-      } else if (response.status === 500) {
+      if (response.status === 500) {
         throw new Error('Server error. Please try again later.');
       } else {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -263,7 +290,21 @@ export async function getVehicleDetails(vehicleId: string, signal?: AbortSignal)
 }
 
 // Get comparable vehicles
-export async function getComparableVehicles(vehicleId: string, top: number = 10, signal?: AbortSignal): Promise<Vehicle[]> {
+export interface ComparablesResponse {
+  vehicle: Vehicle;
+  comparables: Vehicle[];
+  metadata: {
+    requested_top: number;
+    returned: number;
+    total_candidates: number;
+  };
+}
+
+export async function getComparableVehicles(
+  vehicleId: string,
+  top: number = 10,
+  signal?: AbortSignal,
+): Promise<ComparablesResponse> {
   return retryApiCall(async () => {
     const response = await fetch(`${API_BASE}/listings/${vehicleId}/comparables?top=${top}`, { signal });
     if (!response.ok) {
@@ -276,10 +317,22 @@ export async function getComparableVehicles(vehicleId: string, top: number = 10,
       }
     }
     const payload = await response.json();
-    if (!Array.isArray(payload)) {
-      return [];
-    }
-    return payload.map((item) => normalizeVehicle(item));
+
+    const comparables = Array.isArray(payload?.comparables)
+      ? payload.comparables.map((item: any) => normalizeVehicle(item))
+      : [];
+
+    const vehicle = payload?.vehicle ? normalizeVehicle(payload.vehicle) : await getVehicleDetails(vehicleId, signal);
+
+    return {
+      vehicle,
+      comparables,
+      metadata: {
+        requested_top: payload?.metadata?.requested_top ?? top,
+        returned: payload?.metadata?.returned ?? comparables.length,
+        total_candidates: payload?.metadata?.total_candidates ?? comparables.length,
+      },
+    };
   });
 }
 
@@ -318,7 +371,7 @@ export class ApiHealthMonitor {
     }
   }
 
-  getStatus(): { status: string; lastCheck: Date | null; consecutiveFailures: number } {
+  getStatus(): { status?: string; lastCheck: Date | null; consecutiveFailures: number } {
     return {
       status: this.healthStatus,
       lastCheck: this.lastCheck,
@@ -337,9 +390,9 @@ interface CompareOptions {
   signal?: AbortSignal;
 }
 
-export async function compareVehicle(input: string, options?: CompareOptions): Promise<{ vehicle: Vehicle; comparables: Vehicle[] }> {
+export async function compareVehicle(input: string, options?: CompareOptions): Promise<ComparablesResponse> {
   const vehicleId = extractVehicleId(input);
-  
+
   if (!validateVehicleId(vehicleId)) {
     throw new Error('Invalid vehicle URL or ID format. Please use a valid AutoScout24 URL.');
   }
@@ -348,15 +401,8 @@ export async function compareVehicle(input: string, options?: CompareOptions): P
   const signal = options?.signal;
 
   try {
-    const [vehicleDetails, comparables] = await Promise.all([
-      getVehicleDetails(vehicleId, signal),
-      getComparableVehicles(vehicleId, top, signal)
-    ]);
-
-    return {
-      vehicle: vehicleDetails,
-      comparables
-    };
+    const response = await getComparableVehicles(vehicleId, top, signal);
+    return response;
   } catch (error) {
     if (error instanceof Error) {
       throw error;

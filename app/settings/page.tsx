@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -95,13 +95,7 @@ export default function SettingsPage() {
   const [isLoadingProfile, setIsLoadingProfile] = useState(false)
 
   // Load user profile on component mount
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      loadProfile()
-    }
-  }, [isAuthenticated, user])
-
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     if (!user) return
     
     setIsLoadingProfile(true)
@@ -121,7 +115,13 @@ export default function SettingsPage() {
       console.error('Error loading profile:', error)
     }
     setIsLoadingProfile(false)
-  }
+  }, [supabase, user])
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      loadProfile()
+    }
+  }, [isAuthenticated, user, loadProfile])
 
   const updateProfile = async (e: React.FormEvent) => {
     e.preventDefault()

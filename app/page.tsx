@@ -1,4 +1,5 @@
 "use client"
+/* eslint-disable @next/next/no-img-element */
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -161,7 +162,7 @@ export default function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <section className="py-20 px-4">
+      <section id="compare-section" className="py-20 px-4">
         <div className="container mx-auto text-center">
           {/* Logo */}
           <div className="mb-12 flex justify-center">
@@ -170,6 +171,8 @@ export default function HomePage() {
                 src="/carma-logo.png"
                 alt="CARMA Logo"
                 className="w-40 h-40 animate-spin-slow"
+                loading="eager"
+                decoding="sync"
               />
             </div>
           </div>
@@ -181,7 +184,7 @@ export default function HomePage() {
               <span className="text-primary">compare vehicles</span>
             </h1>
             <p className="text-xl text-muted-foreground text-balance max-w-2xl mx-auto">
-              Your team's toolkit to stop searching and start comparing. Securely find, analyze, and track the best automotive deals with CARMA.
+              Your team&apos;s toolkit to stop searching and start comparing. Securely find, analyze, and track the best automotive deals with CARMA.
             </p>
           </div>
 
