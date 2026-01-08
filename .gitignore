@@ -1,3 +1,5 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
 # Python
 __pycache__/
 *.py[cod]
@@ -10,12 +12,22 @@ ENV/
 env/
 *.egg-info/
 dist/
-build/
 
-# Node
+# dependencies
+/node_modules
 node_modules/
+
+# next.js
+/.next/
+/out/
 .next/
 out/
+
+# production
+/build
+build/
+
+# debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -30,10 +42,20 @@ logs/
 *.sqlite
 *.sqlite3
 
-# Environment
+# env files (keep .env.local.example, ignore actual .env files)
 .env
 .env.local
+.env*.local
 .env.*.local
+.env.production
+.env.development
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
 
 # OS
 .DS_Store
@@ -53,17 +75,12 @@ Thumbs.db
 
 # Large data files
 *.parquet
-
-# Health checks
-health_check_*.json
-
-
-# Large data files
 *.json
 ShippingAPI/massive_vehicle_dataset_cleaned.json
 ShippingAPI/global_trade.db
 *.xlsx
 
+<<<<<<< HEAD
 
 
 
@@ -73,3 +90,7 @@ ShippingAPI/global_trade.db
 
 
 
+=======
+# Health checks
+health_check_*.json
+>>>>>>> 0647e7e2496ec25a82fb25ce3557c0cc990f5461
