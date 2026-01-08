@@ -8,11 +8,17 @@ import { Suspense } from "react"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Carma",
+  title: {
+    default: "Carma",
+    template: "%s | Carma",
+  },
   description: "Created with v0",
   generator: "v0.app",
   icons: {
-    icon: "/carma-logo.png",
+    icon: [
+      { url: "/carma-logo.png", sizes: "any" },
+      { url: "/icon.png", sizes: "any" },
+    ],
     shortcut: "/carma-logo.png",
     apple: "/carma-logo.png",
   },
