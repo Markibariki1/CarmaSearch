@@ -53,32 +53,99 @@ export default function HomePage() {
   const { user, isAuthenticated } = useAuth()
   const { toast } = useToast()
 
-  // Fetch vehicle count from API - Only once
+  // Fetch vehicle count from API - Once per day
   useEffect(() => {
     let isMounted = true
+    const CACHE_KEY = 'carma_vehicle_count'
+    const CACHE_TIMESTAMP_KEY = 'carma_vehicle_count_timestamp'
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+
     const fetchVehicleCount = async () => {
       try {
         const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://carma-ml-api.greenwater-7817a41f.northeurope.azurecontainerapps.io'
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 5000) // 5s timeout
+        console.log('Fetching from API:', `${API_BASE}/stats`)
         
         const response = await fetch(`${API_BASE}/stats`, {
-          signal: controller.signal
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+          cache: 'no-store'
         })
-        clearTimeout(timeoutId)
         
-        if (response.ok && isMounted) {
-          const data = await response.json()
-          // Convert to thousands (263,594 -> 263)
+        console.log('Response status:', response.status, response.statusText)
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+        
+        const data = await response.json()
+        console.log('API response data:', data)
+        
+        // Convert to thousands (328,802 -> 328)
+        if (data && typeof data.total_vehicles === 'number') {
           const count = Math.floor(data.total_vehicles / 1000)
-          setVehicleCount(count)
+          console.log('Calculated count (in thousands):', count, 'from', data.total_vehicles, 'vehicles')
+          
+          if (isMounted) {
+            setVehicleCount(count)
+            console.log('Vehicle count updated to:', count)
+            
+            // Cache the value and timestamp
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(CACHE_KEY, count.toString())
+              localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString())
+              console.log('Cached value:', count)
+            }
+          }
+        } else {
+          console.error('Invalid API response format:', data)
+          throw new Error('Invalid response format')
         }
       } catch (error) {
-        if (error.name !== 'AbortError') {
-          console.error('Failed to fetch vehicle count:', error)
+        console.error('Failed to fetch vehicle count:', error)
+        
+        // Fall back to cache if fetch fails
+        if (typeof window !== 'undefined') {
+          const cachedCount = localStorage.getItem(CACHE_KEY)
+          if (cachedCount) {
+            const cachedValue = parseInt(cachedCount)
+            console.log('Using cached value due to fetch error:', cachedValue)
+            if (isMounted) {
+              setVehicleCount(cachedValue)
+            }
+          }
         }
       }
     }
+
+    // Check if we have fresh cached data (< 24 hours old)
+    if (typeof window !== 'undefined') {
+      const cachedCount = localStorage.getItem(CACHE_KEY)
+      const cachedTimestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY)
+      
+      if (cachedCount && cachedTimestamp) {
+        const timeSinceLastFetch = Date.now() - parseInt(cachedTimestamp)
+        const cachedValue = parseInt(cachedCount)
+        
+        console.log('Found cached count:', cachedValue, 'Age:', Math.floor(timeSinceLastFetch / (60 * 60 * 1000)), 'hours')
+        
+        // Use cached value immediately for fast UI
+        setVehicleCount(cachedValue)
+        
+        // If cache is fresh (< 24 hours), we're done
+        if (timeSinceLastFetch < ONE_DAY_MS) {
+          console.log('Cache is fresh, skipping fetch')
+          return
+        } else {
+          console.log('Cache expired, fetching fresh data...')
+        }
+      } else {
+        console.log('No cache found')
+      }
+    }
+    
+    // Always try to fetch (will use cache as fallback if it fails)
     fetchVehicleCount()
     
     return () => {

@@ -57,12 +57,69 @@ async function retryApiCall<T>(
 
 export interface RankingDetails {
   filter_level?: number | null;
+  match_score?: number;
+  similarity_components?: Record<string, number>;
+  categorical_components?: Record<string, unknown>;
+  numeric_components?: Record<string, unknown>;
+  text_components?: {
+    feature_overlap?: number;
+    token_overlap?: number;
+    feature_hits?: string[];
+    shared_tokens?: string[];
+  };
+  weights?: {
+    match?: Record<string, number>;
+    ranking?: Record<string, number>;
+    [key: string]: Record<string, number> | undefined;
+  };
+  deal?: {
+    price_percentile?: number | null;
+    median_price?: number | null;
+    mileage_ratio?: number | null;
+    discount_pct?: number | null;
+    comparable_count?: number;
+    components?: Record<string, number>;
+  };
   score_components?: {
     similarity?: Record<string, number>;
     deal?: Record<string, number>;
     preference?: Record<string, number>;
     weights?: Record<string, number>;
   };
+  strategy?: string | null;
+  [key: string]: unknown;
+}
+
+export type HardMatchStatus = 'match' | 'mismatch' | 'partial' | 'unknown' | 'unlocked';
+
+export interface HardMatchExplanation {
+  status: HardMatchStatus;
+  locked: boolean;
+  target?: string | null;
+  candidate?: string | null;
+  score?: number | null;
+}
+
+export interface VehicleExplanation {
+  hard_matches?: Record<string, HardMatchExplanation>;
+  text_hits?: string[];
+  shared_tokens?: string[];
+  proximities?: {
+    age_months_delta?: number | null;
+    mileage_delta?: number | null;
+    power_delta_pct?: number | null;
+  };
+  deal_view?: {
+    discount_pct?: number | null;
+    price_percentile?: number | null;
+    median_price?: number | null;
+    comparable_count?: number;
+    savings_eur?: number | null;
+    components?: Record<string, number>;
+  };
+  freshness_days?: number | null;
+  target_price_eur?: number | null;
+  candidate_price_eur?: number | null;
 }
 
 export interface Vehicle {
@@ -96,6 +153,7 @@ export interface Vehicle {
   final_score?: number;
   score?: number;
   ranking_details?: RankingDetails;
+  explanation?: VehicleExplanation;
 }
 
 export interface ApiStats {
@@ -199,6 +257,7 @@ const normalizeVehicle = (raw: any): Vehicle => {
     final_score: finalScore,
     score: similarityScore ?? finalScore ?? undefined,
     ranking_details: raw?.ranking_details,
+    explanation: raw?.explanation,
   };
 };
 
@@ -297,6 +356,22 @@ export interface ComparablesResponse {
     requested_top: number;
     returned: number;
     total_candidates: number;
+    raw_candidates?: number;
+    locks?: Record<string, boolean>;
+    tolerances?: Record<string, number>;
+    attempts?: Array<{
+      name: string;
+      row_count: number;
+      kept?: number;
+      dropped_power?: number;
+      duration_s?: number;
+    }>;
+    selected_attempt?: string | null;
+    processing_time_s?: number;
+    fetch?: {
+      primary?: { row_count: number; duration_s: number };
+      fallback?: { row_count: number; duration_s: number };
+    };
   };
 }
 
