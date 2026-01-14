@@ -49,7 +49,7 @@ export default function HomePage() {
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [authMode, setAuthMode] = useState<"login" | "signup">("login")
-  const [vehicleCount, setVehicleCount] = useState(250) // Default to 250k if API fails
+  const [vehicleCount, setVehicleCount] = useState(937) // Default to 937k (current count: 937,627 vehicles)
   const { user, isAuthenticated } = useAuth()
   const { toast } = useToast()
 
@@ -63,16 +63,22 @@ export default function HomePage() {
     const fetchVehicleCount = async () => {
       try {
         const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://carma-ml-api.greenwater-7817a41f.northeurope.azurecontainerapps.io'
-        console.log('Fetching from API:', `${API_BASE}/stats`)
+        console.log('Fetching vehicle count from API:', `${API_BASE}/stats`)
+        
+        // Add timeout to prevent hanging
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
         
         const response = await fetch(`${API_BASE}/stats`, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
           },
-          cache: 'no-store'
+          cache: 'no-store',
+          signal: controller.signal
         })
         
+        clearTimeout(timeoutId)
         console.log('Response status:', response.status, response.statusText)
         
         if (!response.ok) {
@@ -82,7 +88,7 @@ export default function HomePage() {
         const data = await response.json()
         console.log('API response data:', data)
         
-        // Convert to thousands (328,802 -> 328)
+        // Convert to thousands (937,627 -> 937)
         if (data && typeof data.total_vehicles === 'number') {
           const count = Math.floor(data.total_vehicles / 1000)
           console.log('Calculated count (in thousands):', count, 'from', data.total_vehicles, 'vehicles')
@@ -103,7 +109,11 @@ export default function HomePage() {
           throw new Error('Invalid response format')
         }
       } catch (error) {
-        console.error('Failed to fetch vehicle count:', error)
+        if (error.name === 'AbortError') {
+          console.warn('Vehicle count fetch timed out')
+        } else {
+          console.error('Failed to fetch vehicle count:', error)
+        }
         
         // Fall back to cache if fetch fails
         if (typeof window !== 'undefined') {
@@ -119,7 +129,7 @@ export default function HomePage() {
       }
     }
 
-    // Check if we have fresh cached data (< 24 hours old)
+    // Check if we have cached data to show immediately while fetching
     if (typeof window !== 'undefined') {
       const cachedCount = localStorage.getItem(CACHE_KEY)
       const cachedTimestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY)
@@ -133,15 +143,17 @@ export default function HomePage() {
         // Use cached value immediately for fast UI
         setVehicleCount(cachedValue)
         
-        // If cache is fresh (< 24 hours), we're done
-        if (timeSinceLastFetch < ONE_DAY_MS) {
-          console.log('Cache is fresh, skipping fetch')
+        // If cache is fresh (< 1 hour), still fetch in background but don't wait
+        if (timeSinceLastFetch < 60 * 60 * 1000) {
+          console.log('Cache is fresh, fetching in background...')
+          // Still fetch to update cache, but don't block UI
+          fetchVehicleCount().catch(() => {}) // Silently fail if background fetch fails
           return
         } else {
           console.log('Cache expired, fetching fresh data...')
         }
       } else {
-        console.log('No cache found')
+        console.log('No cache found, fetching fresh data...')
       }
     }
     
